@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import api from '../../utils/api';
 import CemeteryMap from '../../components/CemeteryMap';
+import MapSearch from '../../components/MapSearch';
 
 export default function MapPreviewPage() {
   const [lots, setLots] = useState([]);
+  const [focusCoords, setFocusCoords] = useState(null);
 
   useEffect(() => {
     api.get('/burial-lots/list.php')
@@ -34,12 +36,14 @@ export default function MapPreviewPage() {
             <p className="text-gray-500 max-w-lg mx-auto">Browse available lots on our interactive map and find the perfect resting place for your loved ones.</p>
           </div>
 
+          {/* Search Bar */}
+          <div className="flex justify-center mb-8">
+            <MapSearch onSelectLot={setFocusCoords} />
+          </div>
+
           <div className="flex flex-wrap gap-4 justify-center mb-8">
             <span className="flex items-center gap-2 bg-white border border-gray-200 px-4 py-2 rounded-full text-sm">
               <span className="w-3 h-3 bg-available rounded-full shadow-sm shadow-available/50"></span> Available
-            </span>
-            <span className="flex items-center gap-2 bg-white border border-gray-200 px-4 py-2 rounded-full text-sm">
-              <span className="w-3 h-3 bg-reserved rounded-full shadow-sm shadow-reserved/50"></span> Reserved
             </span>
             <span className="flex items-center gap-2 bg-white border border-gray-200 px-4 py-2 rounded-full text-sm">
               <span className="w-3 h-3 bg-occupied rounded-full shadow-sm shadow-occupied/50"></span> Occupied
@@ -47,7 +51,7 @@ export default function MapPreviewPage() {
           </div>
 
           <div className="rounded-3xl overflow-hidden shadow-2xl border border-gray-200">
-            <CemeteryMap lots={lots} height="600px" />
+            <CemeteryMap lots={lots} height="600px" focusCoords={focusCoords} />
           </div>
         </div>
       </section>

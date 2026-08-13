@@ -15,6 +15,8 @@ if (empty($data['burial_lot_id'])) {
     exit;
 }
 
+$slotNumber = isset($data['slot_number']) ? (int)$data['slot_number'] : null;
+
 // Check lot exists and is available
 $stmt = $db->prepare("SELECT * FROM burial_lots WHERE id = :id");
 $stmt->execute([':id' => $data['burial_lot_id']]);
@@ -61,7 +63,7 @@ $stmt->execute([':year' => $year]);
 $seq = (int)$stmt->fetch()['count'] + 1;
 $serialNumber = 'FL-' . strtoupper($lotNumber) . '-' . $year . '-' . str_pad($seq, 4, '0', STR_PAD_LEFT);
 
-$stmt = $db->prepare("INSERT INTO reservations (serial_number, client_id, burial_lot_id, reservation_date, status, created_at, updated_at) VALUES (:serial, :client_id, :lot_id, NOW(), 'pending', NOW(), NOW())");
-$stmt->execute([':serial' => $serialNumber, ':client_id' => $user['id'], ':lot_id' => $data['burial_lot_id']]);
+$stmt = $db->prepare("INSERT INTO reservations (serial_number, client_id, burial_lot_id, slot_number, reservation_date, status, created_at, updated_at) VALUES (:serial, :client_id, :lot_id, :slot_number, NOW(), 'pending', NOW(), NOW())");
+$stmt->execute([':serial' => $serialNumber, ':client_id' => $user['id'], ':lot_id' => $data['burial_lot_id'], ':slot_number' => $slotNumber]);
 
 echo json_encode(['message' => 'Reservation request submitted', 'serial_number' => $serialNumber]);

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import StatusBadge from './StatusBadge';
 
 export default function LotImageViewer({ lot, onClose }) {
@@ -7,6 +8,13 @@ export default function LotImageViewer({ lot, onClose }) {
   const [dragging, setDragging] = useState(false);
   const [rotation, setRotation] = useState({ x: 0, y: 0 });
   const lastPos = useRef({ x: 0, y: 0 });
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = ''; };
+  }, []);
 
   const handleMouseDown = (e) => {
     if (!is360) return;
@@ -48,10 +56,12 @@ export default function LotImageViewer({ lot, onClose }) {
     };
   }, []);
 
-  const imageUrl = lot.image.startsWith('http') ? lot.image : `http://localhost/ForestLake/forest-lake-api${lot.image}`;
+  const imageUrl = lot.image ? (lot.image.startsWith('http') ? lot.image : `http://localhost/ForestLake/forest-lake-api${lot.image}`) : '';
 
-  return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in" onClick={onClose}>
+  if (!mounted) return null;
+
+  const content = (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in" onClick={onClose}>
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl relative overflow-hidden animate-scale-in" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-gray-100">
@@ -109,4 +119,6 @@ export default function LotImageViewer({ lot, onClose }) {
       </div>
     </div>
   );
+
+  return createPortal(content, document.body);
 }

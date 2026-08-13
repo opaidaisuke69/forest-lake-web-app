@@ -53,15 +53,17 @@ if ($count >= $maxSlots) {
     exit;
 }
 
-$stmt = $db->prepare("INSERT INTO deceased_info (burial_lot_id, reservation_id, name, date_of_birth, date_of_death, relationship_to_client, burial_date) VALUES (:burial_lot_id, :reservation_id, :name, :date_of_birth, :date_of_death, :relationship, :burial_date)");
+$stmt = $db->prepare("INSERT INTO deceased_info (burial_lot_id, reservation_id, name, gender, date_of_birth, date_of_death, relationship_to_client, burial_date, status) VALUES (:burial_lot_id, :reservation_id, :name, :gender, :date_of_birth, :date_of_death, :relationship, :burial_date, :status)");
 $stmt->execute([
     ':burial_lot_id' => $data['burial_lot_id'],
     ':reservation_id' => $data['reservation_id'] ?? null,
     ':name' => $data['name'],
+    ':gender' => $data['gender'] ?? null,
     ':date_of_birth' => $data['date_of_birth'] ?: null,
     ':date_of_death' => $data['date_of_death'] ?: null,
     ':relationship' => $data['relationship_to_client'] ?? '',
     ':burial_date' => $data['burial_date'] ?: null,
+    ':status' => $user['role'] === 'admin' ? 'approved' : 'pending',
 ]);
 
-echo json_encode(['message' => 'Deceased information added', 'id' => $db->lastInsertId()]);
+echo json_encode(['message' => $user['role'] === 'admin' ? 'Deceased information added' : 'Deceased information submitted for review', 'id' => $db->lastInsertId()]);

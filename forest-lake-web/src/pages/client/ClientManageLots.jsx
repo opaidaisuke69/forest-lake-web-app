@@ -11,9 +11,9 @@ export default function ClientManageLots() {
   const [loading, setLoading] = useState(true);
   const [deceasedModal, setDeceasedModal] = useState(null);
   const [deceasedList, setDeceasedList] = useState([]);
-  const [deceasedForm, setDeceasedForm] = useState({ name: '', date_of_birth: '', date_of_death: '', relationship_to_client: '', burial_date: '' });
+  const [deceasedForm, setDeceasedForm] = useState({ name: '', gender: '', date_of_birth: '', date_of_death: '', burial_date: '' });
   const [savingDeceased, setSavingDeceased] = useState(false);
-  const [editingDeceased, setEditingDeceased] = useState(null);
+  const [imageFile, setImageFile] = useState(null);
 
   useEffect(() => {
     api.get('/reservations/list.php')
@@ -36,47 +36,51 @@ export default function ClientManageLots() {
 
   const openDeceasedModal = async (reservation) => {
     setDeceasedModal(reservation);
-    setEditingDeceased(null);
+    setDeceasedForm({ name: '', gender: '', date_of_birth: '', date_of_death: '', burial_date: '' });
+    setImageFile(null);
     try {
       const res = await api.get(`/deceased/list.php?reservation_id=${reservation.id}`);
-      const records = res.data.data || [];
-      setDeceasedList(records);
-      if (records.length > 0) {
-        const d = records[0];
-        setEditingDeceased(d);
-        setDeceasedForm({ name: d.name || '', date_of_birth: d.date_of_birth || '', date_of_death: d.date_of_death || '', relationship_to_client: d.relationship_to_client || '', burial_date: d.burial_date || '' });
-      } else {
-        setDeceasedForm({ name: '', date_of_birth: '', date_of_death: '', relationship_to_client: '', burial_date: '' });
-      }
+      setDeceasedList(res.data.data || []);
     } catch {
       setDeceasedList([]);
-      setDeceasedForm({ name: '', date_of_birth: '', date_of_death: '', relationship_to_client: '', burial_date: '' });
     }
   };
 
-  const handleSaveDeceased = async (e) => {
+  const handleSubmitDeceased = async (e) => {
     e.preventDefault();
     if (!deceasedForm.name.trim()) { toast.error('Name is required'); return; }
+    if (!deceasedForm.gender) { toast.error('Gender is required'); return; }
     setSavingDeceased(true);
     try {
-      if (editingDeceased) {
-        await api.put('/deceased/update.php', { id: editingDeceased.id, ...deceasedForm });
-        toast.success('Deceased info updated');
-      } else {
-        await api.post('/deceased/create.php', { burial_lot_id: deceasedModal.burial_lot_id, reservation_id: deceasedModal.id, ...deceasedForm });
-        toast.success('Deceased info added');
+      const res = await api.post('/deceased/create.php', { burial_lot_id: deceasedModal.burial_lot_id, reservation_id: deceasedModal.id, ...deceasedForm });
+      const newId = res.data.id;
+
+      // Upload image if provided
+      if (imageFile && newId) {
+        const formData = new FormData();
+        formData.append('deceased_id', newId);
+        formData.append('image', imageFile);
+        await api.post('/deceased/upload-image.php', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
       }
-      setDeceasedForm({ name: '', date_of_birth: '', date_of_death: '', relationship_to_client: '', burial_date: '' });
-      setEditingDeceased(null);
-      setDeceasedModal(null);
+
+      toast.success('Deceased info submitted for admin review');
+      setDeceasedForm({ name: '', gender: '', date_of_birth: '', date_of_death: '', burial_date: '' });
+      setImageFile(null);
+      // Refresh list
+      const listRes = await api.get(`/deceased/list.php?reservation_id=${deceasedModal.id}`);
+      setDeceasedList(listRes.data.data || []);
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to save');
+      toast.error(err.response?.data?.message || 'Failed to submit');
     } finally { setSavingDeceased(false); }
   };
 
-  const startEditDeceased = (d) => {
-    setEditingDeceased(d);
-    setDeceasedForm({ name: d.name || '', date_of_birth: d.date_of_birth || '', date_of_death: d.date_of_death || '', relationship_to_client: d.relationship_to_client || '', burial_date: d.burial_date || '' });
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'approved': return 'bg-green-100 text-green-700 border-green-200';
+      case 'pending': return 'bg-amber-100 text-amber-700 border-amber-200';
+      case 'rejected': return 'bg-red-100 text-red-700 border-red-200';
+      default: return 'bg-gray-100 text-gray-700 border-gray-200';
+    }
   };
 
   if (loading) return <CardSkeleton count={4} />;
@@ -84,8 +88,8 @@ export default function ClientManageLots() {
   return (
     <div className="animate-fade-in-up">
       <div className="mb-8">
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Manage My Lots</h1>
-        <p className="text-gray-500 mt-1">View and manage deceased information for your reserved lots.</p>
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">My Lots</h1>
+        <p className="text-gray-500 mt-1">Submit deceased information for your reserved lots. Admin will review and approve your submissions.</p>
       </div>
 
       {reservations.length === 0 ? (
@@ -111,7 +115,7 @@ export default function ClientManageLots() {
               </div>
               <button onClick={() => openDeceasedModal(r)} className="w-full text-sm bg-purple-50 text-purple-600 px-4 py-2.5 rounded-xl font-medium hover:bg-purple-100 border border-purple-100 transition flex items-center justify-center gap-2">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-                Manage Deceased Info
+                Deceased Info
               </button>
             </div>
           ))}
@@ -120,34 +124,57 @@ export default function ClientManageLots() {
 
       {/* Deceased Information Modal */}
       {deceasedModal && (
-        <Modal title={`Deceased Information — Lot ${deceasedModal.lot_number}`} onClose={() => setDeceasedModal(null)}>
+        <Modal title={`Deceased Info — Lot ${deceasedModal.lot_number}`} onClose={() => setDeceasedModal(null)}>
           <p className="text-xs text-gray-400 mb-4">Serial: {deceasedModal.serial_number || `#${deceasedModal.id}`}</p>
+
+          {/* Existing submissions */}
           {deceasedList.length > 0 && (
             <div className="mb-6 space-y-3">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Your Deceased Record</p>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Your Submissions</p>
               {deceasedList.map(d => (
                 <div key={d.id} className="bg-gray-50 rounded-xl p-4 text-sm space-y-1.5">
                   <div className="flex justify-between items-start">
                     <p className="font-semibold text-gray-900">{d.name}</p>
-                    <button onClick={() => startEditDeceased(d)} className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition" title="Edit">
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                    </button>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${getStatusColor(d.status || 'approved')}`}>
+                      {(d.status || 'approved').toUpperCase()}
+                    </span>
                   </div>
-                  {d.relationship_to_client && <p className="text-gray-500">Relationship: <span className="text-gray-700">{d.relationship_to_client}</span></p>}
                   {d.date_of_birth && <p className="text-gray-500">Born: <span className="text-gray-700">{d.date_of_birth}</span></p>}
                   {d.date_of_death && <p className="text-gray-500">Died: <span className="text-gray-700">{d.date_of_death}</span></p>}
                   {d.burial_date && <p className="text-gray-500">Burial Date: <span className="text-gray-700">{d.burial_date}</span></p>}
+                  {d.status === 'pending' && (
+                    <p className="text-xs text-amber-600 mt-2 flex items-center gap-1">
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                      Waiting for admin review
+                    </p>
+                  )}
+                  {d.status === 'rejected' && (
+                    <p className="text-xs text-red-600 mt-2 flex items-center gap-1">
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                      Rejected by admin
+                    </p>
+                  )}
                 </div>
               ))}
             </div>
           )}
 
-          {(editingDeceased || deceasedList.length < 1) ? (
-            <form onSubmit={handleSaveDeceased} className="space-y-3">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{editingDeceased ? 'Edit Record' : 'Add Deceased Information'}</p>
+          {/* Submit form - only show if no approved/pending record exists */}
+          {deceasedList.filter(d => d.status === 'approved' || d.status === 'pending').length < 1 ? (
+            <form onSubmit={handleSubmitDeceased} className="space-y-3">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Submit Deceased Information</p>
+              <p className="text-xs text-gray-400 mb-2">Your submission will be reviewed by the admin before being approved.</p>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
                 <input type="text" value={deceasedForm.name} onChange={e => setDeceasedForm({...deceasedForm, name: e.target.value})} required className="input-modern" placeholder="Full name of deceased" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Gender *</label>
+                <select value={deceasedForm.gender} onChange={e => setDeceasedForm({...deceasedForm, gender: e.target.value})} required className="input-modern">
+                  <option value="">Select gender</option>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                </select>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -159,31 +186,24 @@ export default function ClientManageLots() {
                   <input type="date" value={deceasedForm.date_of_death} onChange={e => setDeceasedForm({...deceasedForm, date_of_death: e.target.value})} className="input-modern" />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Relationship</label>
-                  <input type="text" value={deceasedForm.relationship_to_client} onChange={e => setDeceasedForm({...deceasedForm, relationship_to_client: e.target.value})} className="input-modern" placeholder="e.g. Father, Mother" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Burial Date</label>
-                  <input type="date" value={deceasedForm.burial_date} onChange={e => setDeceasedForm({...deceasedForm, burial_date: e.target.value})} className="input-modern" />
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Burial Date</label>
+                <input type="date" value={deceasedForm.burial_date} onChange={e => setDeceasedForm({...deceasedForm, burial_date: e.target.value})} className="input-modern" />
               </div>
-              <div className="flex gap-2 pt-2">
-                {editingDeceased && (
-                  <button type="button" onClick={() => { setEditingDeceased(null); setDeceasedForm({ name: '', date_of_birth: '', date_of_death: '', relationship_to_client: '', burial_date: '' }); }} className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-xl font-semibold transition hover:bg-gray-200">
-                    Cancel
-                  </button>
-                )}
-                <button type="submit" disabled={savingDeceased} className="flex-1 btn-primary">
-                  {savingDeceased ? 'Saving...' : (editingDeceased ? 'Update Info' : 'Add Deceased Info')}
-                </button>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Photo of Deceased</label>
+                <input type="file" accept="image/jpeg,image/png,image/webp" onChange={e => setImageFile(e.target.files[0] || null)} className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:bg-purple-50 file:text-purple-600 file:font-medium hover:file:bg-purple-100 file:transition-all cursor-pointer" />
+                <p className="text-xs text-gray-400 mt-1">JPG, PNG, or WEBP. Max 5MB.</p>
               </div>
+              <button type="submit" disabled={savingDeceased} className="w-full btn-primary mt-2">
+                {savingDeceased ? 'Submitting...' : 'Submit for Review'}
+              </button>
             </form>
           ) : (
-            <div className="text-center py-4 bg-green-50 rounded-xl border border-green-100">
-              <p className="text-sm text-green-700 font-medium">Deceased record submitted</p>
-              <p className="text-xs text-green-600 mt-1">You can edit the record above if you need to make changes.</p>
+            <div className="text-center py-4 bg-blue-50 rounded-xl border border-blue-100">
+              <svg className="w-8 h-8 mx-auto text-blue-500 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              <p className="text-sm text-blue-700 font-medium">Deceased record submitted</p>
+              <p className="text-xs text-blue-600 mt-1">The admin will review and approve your submission.</p>
             </div>
           )}
         </Modal>

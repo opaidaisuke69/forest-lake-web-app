@@ -18,6 +18,7 @@ export default function ClientBurialLots() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [selectedLot, setSelectedLot] = useState(null);
+  const [selectedSlot, setSelectedSlot] = useState(null);
   const [reserving, setReserving] = useState(false);
   const [viewingLot, setViewingLot] = useState(null);
 
@@ -45,9 +46,10 @@ export default function ClientBurialLots() {
     if (!selectedLot) return;
     setReserving(true);
     try {
-      await api.post('/reservations/create.php', { burial_lot_id: selectedLot.id });
+      await api.post('/reservations/create.php', { burial_lot_id: selectedLot.id, slot_number: selectedSlot });
       toast.success('Reservation request submitted!');
       setSelectedLot(null);
+      setSelectedSlot(null);
       const res = await api.get('/burial-lots/list.php');
       setLots(res.data.data || []);
     } catch (err) {

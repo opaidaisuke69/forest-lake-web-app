@@ -1,10 +1,11 @@
-import { APIProvider, Map, AdvancedMarker, Polygon } from '@vis.gl/react-google-maps';
+import { APIProvider, Map, AdvancedMarker, Polygon, useMap } from '@vis.gl/react-google-maps';
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import StatusBadge from './StatusBadge';
 import api from '../utils/api';
+import forestLakeLogo from '../assets/global/forest-lake-logo.png';
 
-const API_KEY = 'AIzaSyCLGxMoMLeYHTe35Los_gEPNMEBMp0W6UU';
+const API_KEY = 'AIzaSyAYMxiPynLx-KZ7udjt382QPsgadmzh7HM';
 const CENTER = { lat: 10.602369, lng: 122.935156 };
 const MAP_ID = 'forest_lake_map';
 
@@ -308,25 +309,137 @@ function LotPin({ lot, onClick, clickable = true }) {
   );
 }
 
-function OwnerCard({ owner, onViewDeceased }) {
-  const o = owner;
-  const deceased = o.deceased || [];
+function LotSlotGrid({ lot, owners, onViewDeceased, onSelectSlot, selectedSlot }) {
+  const maxSlots = parseInt(lot.max_slots) || 8;
+  // Flatten all deceased across all owners
+  const allDeceased = owners.flatMap(o => (o.deceased || []).map(d => ({ ...d, owner: o })));
+
+  // Build slots: occupied slots from deceased, rest are available
+  // Also track owners without deceased for "client info" display
+  const ownersWithoutDeceased = owners.filter(o => !o.deceased || o.deceased.length === 0);
+
+  const slots = [];
+  for (let i = 0; i < maxSlots; i++) {
+    if (i < allDeceased.length) {
+      slots.push({ status: 'occupied', deceased: allDeceased[i], owner: allDeceased[i].owner, slotNumber: i + 1 });
+    } else if (i - allDeceased.length < ownersWithoutDeceased.length) {
+      slots.push({ status: 'reserved', deceased: null, owner: ownersWithoutDeceased[i - allDeceased.length], slotNumber: i + 1 });
+    } else {
+      slots.push({ status: 'available', deceased: null, owner: null, slotNumber: i + 1 });
+    }
+  }
+
+  // 4 columns x 2 rows grid layout
+  const cols = 4;
 
   return (
-    <div className="bg-blue-50 rounded-lg border border-blue-100 overflow-hidden">
-      <button onClick={() => onViewDeceased(o)} className="w-full flex items-center gap-3 p-3 hover:bg-blue-100/50 transition text-left">
-        <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-xs shrink-0">
-          {o.first_name?.[0]}{o.last_name?.[0]}
+    <div className="space-y-4">
+      {/* Slot Grid */}
+      <div className="border-2 border-gray-800 rounded-2xl overflow-hidden">
+        <div className="grid" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
+          {slots.map((slot, idx) => {
+            const isSelected = selectedSlot === slot.slotNumber;
+            const isSelectable = onSelectSlot && slot.status === 'available';
+
+            return (
+              <button
+                key={idx}
+                onClick={() => {
+                  if (slot.deceased) onViewDeceased(slot.owner);
+                  else if (isSelectable) onSelectSlot(slot.slotNumber);
+                }}
+                disabled={!slot.deceased && !isSelectable}
+                className={`relative p-4 flex flex-col items-center justify-center min-h-[180px] transition-all border border-gray-800 ${
+                  isSelected
+                    ? 'bg-blue-100 ring-2 ring-blue-500 ring-inset'
+                    : slot.status === 'occupied'
+                    ? 'bg-white hover:bg-red-50/50 cursor-pointer'
+                    : slot.status === 'reserved'
+                    ? 'bg-amber-50/30 cursor-default'
+                    : isSelectable
+                    ? 'bg-white hover:bg-green-50 cursor-pointer'
+                    : 'bg-white cursor-default'
+                }`}
+              >
+                {/* Selected checkmark */}
+                {isSelected && (
+                  <div className="absolute top-2 left-2 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
+                    <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                  </div>
+                )}
+
+                {/* Slot Number */}
+                <span className="absolute top-2 right-2 text-[10px] font-mono text-gray-400">#{slot.slotNumber}</span>
+
+                {/* Status Indicator Circle with Image */}
+                <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-3 shadow-lg border-4 border-white ${
+                  isSelected ? 'bg-blue-500' : slot.status === 'occupied' ? 'bg-red-500' : slot.status === 'reserved' ? 'bg-amber-400' : 'bg-green-500'
+                }`}>
+                  {slot.deceased?.image ? (
+                    <img src={`${IMAGE_BASE}${slot.deceased.image}`} alt={slot.deceased.name} className="w-full h-full rounded-full object-cover" />
+                  ) : (
+                    <img src={forestLakeLogo} alt="Forest Lake" className="w-12 h-12 object-contain" />
+                  )}
+                </div>
+
+                {/* Name */}
+                <p className="text-sm font-bold text-gray-900 text-center leading-snug w-full">
+                  {slot.deceased ? slot.deceased.name : slot.owner ? `${slot.owner.first_name} ${slot.owner.last_name}` : isSelected ? 'Selected' : 'Available'}
+                </p>
+                {/* Status Label - hide "Occupied" if deceased info exists */}
+                {!(slot.status === 'occupied' && slot.deceased) && (
+                  <p className={`text-xs font-semibold mt-1.5 ${
+                    isSelected ? 'text-blue-600' : slot.status === 'occupied' ? 'text-red-600' : slot.status === 'reserved' ? 'text-amber-600' : 'text-green-600'
+                  }`}>
+                    {isSelected ? 'Your Selection' : slot.status === 'occupied' ? 'Occupied' : slot.status === 'reserved' ? 'Reserved' : 'Open'}
+                  </p>
+                )}
+                {/* Death date for deceased */}
+                {slot.deceased?.date_of_death && (
+                  <p className="text-[11px] text-gray-500 mt-1">
+                    † {slot.deceased.date_of_death}
+                  </p>
+                )}
+              </button>
+            );
+          })}
         </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-gray-900 truncate">{o.first_name} {o.last_name}</p>
-          {o.serial_number && <p className="text-xs text-gray-500 font-mono">{o.serial_number}</p>}
+      </div>
+
+      {/* Lot Details Summary */}
+      <div className="bg-gray-50 rounded-xl p-4 space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-gray-500">Total Slots</span>
+          <span className="text-sm font-bold text-gray-800">{maxSlots}</span>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {deceased.length > 0 && <span className="text-xs text-purple-600 bg-purple-100 px-1.5 py-0.5 rounded">{deceased.length}</span>}
-          <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-gray-500">Occupied</span>
+          <span className="text-sm font-bold text-red-600">{allDeceased.length}</span>
         </div>
-      </button>
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-gray-500">Reserved</span>
+          <span className="text-sm font-bold text-amber-600">{ownersWithoutDeceased.length}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-gray-500">Available</span>
+          <span className="text-sm font-bold text-green-600">{maxSlots - allDeceased.length - ownersWithoutDeceased.length}</span>
+        </div>
+      </div>
+
+      {/* Legend */}
+      <div className="flex items-center justify-center gap-6">
+        <span className="flex items-center gap-2 text-sm text-gray-600">
+          <span className="w-3.5 h-3.5 rounded-full bg-green-500"></span> Available
+        </span>
+        <span className="flex items-center gap-2 text-sm text-gray-600">
+          <span className="w-3.5 h-3.5 rounded-full bg-red-500"></span> Occupied
+        </span>
+        {onSelectSlot && (
+          <span className="flex items-center gap-2 text-sm text-gray-600">
+            <span className="w-3.5 h-3.5 rounded-full bg-blue-500"></span> Selected
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -370,50 +483,85 @@ function DeceasedModal({ owner, onClose }) {
     return `${years} year${years > 1 ? 's' : ''}, ${remainingMonths} month${remainingMonths > 1 ? 's' : ''} ago`;
   };
 
+  const formatReadableDate = (dateStr) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  };
+
   return createPortal(
-    <div className="fixed inset-0 z-[10001] flex items-start justify-center bg-black/60 backdrop-blur-sm overflow-y-auto py-8 px-4 animate-fade-in" onClick={onClose}>
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 relative my-auto shrink-0 animate-scale-in" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[10001] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in" onClick={onClose}>
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-8 relative shrink-0 animate-scale-in max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <button onClick={onClose} className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all" aria-label="Close">
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
         </button>
 
-        <div className="flex items-center gap-3 mb-5">
-          <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-sm">
-            {owner.first_name?.[0]}{owner.last_name?.[0]}
-          </div>
-          <div>
-            <h3 className="text-lg font-bold text-gray-900">{owner.first_name} {owner.last_name}</h3>
-            {owner.serial_number && <p className="text-xs text-gray-500 font-mono">{owner.serial_number}</p>}
-          </div>
-        </div>
-
-        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Deceased Information ({deceased.length})</p>
-
         {deceased.length > 0 ? (
-          <div className="space-y-3">
+          <div className="space-y-6">
             {deceased.map(d => {
               const age = calculateAge(d.date_of_birth, d.date_of_death);
               const sinceDeath = timeSinceDeath(d.date_of_death);
               return (
-                <div key={d.id} className="bg-purple-50 rounded-xl p-4 border border-purple-100 space-y-1.5">
-                  <p className="text-sm font-semibold text-gray-900">{d.name}</p>
+                <div key={d.id} className="text-center">
+                  {/* Deceased Image */}
+                  <div className="w-24 h-24 rounded-full mx-auto mb-4 overflow-hidden border-4 border-purple-100 shadow-lg">
+                    {d.image ? (
+                      <img src={`${IMAGE_BASE}${d.image}`} alt={d.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full bg-purple-50 flex items-center justify-center">
+                        <img src={forestLakeLogo} alt="Forest Lake" className="w-14 h-14 object-contain" />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Name */}
+                  <h3 className="text-xl font-bold text-gray-900 mb-1">{d.name}</h3>
+
+                  {/* Age & Time since death */}
                   {age !== null && (
-                    <p className="text-xs text-purple-700 font-medium">Age at death: {age} years old</p>
+                    <p className="text-sm text-purple-700 font-medium">Age at death: {age} years old</p>
                   )}
                   {sinceDeath && (
-                    <p className="text-xs text-purple-700 font-medium">Passed: {sinceDeath}</p>
+                    <p className="text-sm text-purple-700 font-medium mb-4">Passed: {sinceDeath}</p>
                   )}
-                  {d.relationship_to_client && <p className="text-xs text-gray-500">Relationship: <span className="text-gray-700">{d.relationship_to_client}</span></p>}
-                  {d.date_of_birth && <p className="text-xs text-gray-500">Born: <span className="text-gray-700">{d.date_of_birth}</span></p>}
-                  {d.date_of_death && <p className="text-xs text-gray-500">Died: <span className="text-gray-700">{d.date_of_death}</span></p>}
-                  {d.burial_date && <p className="text-xs text-gray-500">Burial Date: <span className="text-gray-700">{d.burial_date}</span></p>}
+
+                  {/* Details */}
+                  <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-left mt-4">
+                    {d.date_of_birth && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-500">Born</span>
+                        <span className="font-medium text-gray-800">{formatReadableDate(d.date_of_birth)}</span>
+                      </div>
+                    )}
+                    {d.date_of_death && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-500">Died</span>
+                        <span className="font-medium text-gray-800">{formatReadableDate(d.date_of_death)}</span>
+                      </div>
+                    )}
+                    {d.burial_date && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-500">Burial Date</span>
+                        <span className="font-medium text-gray-800">{formatReadableDate(d.burial_date)}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               );
             })}
           </div>
         ) : (
-          <div className="text-center py-8 bg-gray-50 rounded-xl">
-            <p className="text-sm text-gray-400">No deceased information yet</p>
+          /* Show client info only if occupied but no deceased */
+          <div className="text-center py-6">
+            <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <span className="text-2xl font-bold text-amber-600">{owner.first_name?.[0]}{owner.last_name?.[0]}</span>
+            </div>
+            <h3 className="text-lg font-bold text-gray-900 mb-1">{owner.first_name} {owner.last_name}</h3>
+            {owner.contact_number && <p className="text-sm text-gray-500 mb-4">{owner.contact_number}</p>}
+            <div className="bg-gray-50 rounded-xl p-6">
+              <p className="text-sm text-gray-400">No deceased information yet</p>
+              <p className="text-xs text-gray-400 mt-1">This slot is reserved but has no burial record.</p>
+            </div>
           </div>
         )}
       </div>
@@ -429,6 +577,7 @@ function LotModal({ lot, onClose, onReserve }) {
   const [fullscreen, setFullscreen] = useState(false);
   const [owners, setOwners] = useState([]);
   const [selectedOwner, setSelectedOwner] = useState(null);
+  const [selectedSlot, setSelectedSlot] = useState(null);
 
   useEffect(() => {
     document.body.style.overflow = 'hidden';
@@ -454,8 +603,8 @@ function LotModal({ lot, onClose, onReserve }) {
 
   return (
     <>
-      <div className="fixed inset-0 z-[9999] flex items-start justify-center bg-black/60 backdrop-blur-sm overflow-y-auto py-8 px-4 animate-fade-in" onClick={onClose}>
-        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-6 relative my-auto shrink-0 animate-scale-in" onClick={e => e.stopPropagation()}>
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in" onClick={onClose}>
+        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl p-8 relative shrink-0 animate-scale-in max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
           <button onClick={onClose} className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all" aria-label="Close">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
@@ -464,13 +613,13 @@ function LotModal({ lot, onClose, onReserve }) {
 
           {/* Image gallery */}
           {loadingImages ? (
-            <div className="rounded-xl bg-gray-100 h-48 flex items-center justify-center animate-pulse mb-4">
+            <div className="rounded-xl bg-gray-100 h-64 flex items-center justify-center animate-pulse mb-6">
               <span className="text-gray-400 text-sm">Loading...</span>
             </div>
           ) : images.length > 0 ? (
-            <div className="mb-4">
+            <div className="mb-6">
               <div className="rounded-xl overflow-hidden border border-gray-200 relative cursor-pointer" onClick={() => setFullscreen(true)}>
-                <img src={imageUrl} alt={`Lot ${lot.lot_number}`} className="w-full h-48 object-cover hover:opacity-90 transition" />
+                <img src={imageUrl} alt={`Lot ${lot.lot_number}`} className="w-full h-64 object-cover hover:opacity-90 transition" />
                 {currentImage?.image_type === '360' && (
                   <span className="absolute top-2 left-2 bg-black/60 text-white text-[10px] px-2 py-0.5 rounded-full">🌐 360°</span>
                 )}
@@ -512,25 +661,34 @@ function LotModal({ lot, onClose, onReserve }) {
             </div>
           )}
 
-          {/* Owners */}
-          {owners.length > 0 && (
-            <div className="mb-4">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Lot Owners ({owners.length})</p>
-              <div className="space-y-2">
-                {owners.map(o => (
-                  <OwnerCard key={o.reservation_id} owner={o} onViewDeceased={setSelectedOwner} />
-                ))}
-              </div>
-            </div>
-          )}
+          {/* Lot Slot Grid - Visual Occupation Status */}
+          <div className="mb-4">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Lot Slots ({lot.max_slots || 8})</p>
+            {onReserve && lot.status === 'available' && (
+              <p className="text-sm text-blue-600 mb-3 font-medium">👆 Select an available slot to reserve</p>
+            )}
+            <LotSlotGrid
+              lot={lot}
+              owners={owners}
+              onViewDeceased={setSelectedOwner}
+              onSelectSlot={onReserve && lot.status === 'available' ? (slotNum) => setSelectedSlot(slotNum === selectedSlot ? null : slotNum) : undefined}
+              selectedSlot={selectedSlot}
+            />
+          </div>
 
           {/* Deceased Information - removed, now shown per owner */}
 
           {/* Reserve Button */}
           {onReserve && lot.status === 'available' && (
-            <button onClick={() => { onReserve(lot); onClose(); }} className="w-full btn-primary flex items-center justify-center gap-2 mt-2">
+            <button
+              onClick={() => { onReserve(lot, selectedSlot); onClose(); }}
+              disabled={!selectedSlot}
+              className={`w-full flex items-center justify-center gap-2 mt-2 py-3 rounded-xl font-semibold transition ${
+                selectedSlot ? 'btn-primary' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+              }`}
+            >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
-              Reserve This Lot
+              {selectedSlot ? `Reserve Slot #${selectedSlot}` : 'Select a slot to reserve'}
             </button>
           )}
         </div>
@@ -567,7 +725,279 @@ function DetailRow({ label, value }) {
   );
 }
 
-export default function CemeteryMap({ lots = [], height = '500px', onMapClick, isAdmin = false, onReserve, focusLotId }) {
+const ENTRANCE = { lat: 10.602262, lng: 122.933803 };
+
+// Road network nodes (intersections/waypoints along cemetery roads)
+const ROAD_NODES = [
+  { lat: 10.602262, lng: 122.933803 },  // 0: Entrance gate
+  { lat: 10.602451, lng: 122.933921 },  // 1
+  { lat: 10.602723, lng: 122.933711 },  // 2
+  { lat: 10.602857, lng: 122.933607 },  // 3
+  { lat: 10.602232, lng: 122.934106 },  // 4
+  { lat: 10.601993, lng: 122.934299 },  // 5
+  { lat: 10.601890, lng: 122.934393 },  // 6
+  { lat: 10.601782, lng: 122.934575 },  // 7
+  { lat: 10.601930, lng: 122.934706 },  // 8
+  { lat: 10.602146, lng: 122.934859 },  // 9
+  { lat: 10.602312, lng: 122.934999 },  // 10
+  { lat: 10.602478, lng: 122.934881 },  // 11
+  { lat: 10.602679, lng: 122.934709 },  // 12
+  { lat: 10.602916, lng: 122.934516 },  // 13
+  { lat: 10.603154, lng: 122.934315 },  // 14
+  { lat: 10.602974, lng: 122.933784 },  // 15
+  { lat: 10.603153, lng: 122.934076 },  // 16
+  { lat: 10.603272, lng: 122.934256 },  // 17
+  { lat: 10.603427, lng: 122.934497 },  // 18
+  { lat: 10.603694, lng: 122.934937 },  // 19
+  { lat: 10.603859, lng: 122.935229 },  // 20
+  { lat: 10.603661, lng: 122.935329 },  // 21
+  { lat: 10.603302, lng: 122.935514 },  // 22
+  { lat: 10.603149, lng: 122.935600 },  // 23
+  { lat: 10.602936, lng: 122.935456 },  // 24
+  { lat: 10.602577, lng: 122.935183 },  // 25
+  { lat: 10.602320, lng: 122.934997 },  // 26
+  { lat: 10.602113, lng: 122.934842 },  // 27
+  { lat: 10.601894, lng: 122.934681 },  // 28
+  { lat: 10.602213, lng: 122.935206 },  // 29
+  { lat: 10.602074, lng: 122.935520 },  // 30
+  { lat: 10.602007, lng: 122.935656 },  // 31
+  { lat: 10.601907, lng: 122.935892 },  // 32
+  { lat: 10.601777, lng: 122.936189 },  // 33
+  { lat: 10.601680, lng: 122.935872 },  // 34
+  { lat: 10.601434, lng: 122.935556 },  // 35
+  { lat: 10.601334, lng: 122.936033 },  // 36
+  { lat: 10.601144, lng: 122.935950 },  // 37
+  { lat: 10.601173, lng: 122.935510 },  // 38
+  { lat: 10.601163, lng: 122.935685 },  // 39
+  { lat: 10.601144, lng: 122.935829 },  // 40
+  { lat: 10.601971, lng: 122.936231 },  // 41
+  { lat: 10.602308, lng: 122.936277 },  // 42
+  { lat: 10.602705, lng: 122.936294 },  // 43
+  { lat: 10.602839, lng: 122.936122 },  // 44
+  { lat: 10.603045, lng: 122.935790 },  // 45
+  { lat: 10.603149, lng: 122.935590 },  // 46
+  // Section U road
+  { lat: 10.602013, lng: 122.935657 },  // 47 (U start - top)
+  { lat: 10.601884, lng: 122.935925 },  // 48 (U end)
+  // Section V road
+  { lat: 10.602009, lng: 122.935646 },  // 49 (V start - top)
+  { lat: 10.601545, lng: 122.935577 },  // 50 (V end - bottom)
+  // Section W road
+  { lat: 10.602011, lng: 122.935657 },  // 51 (W start)
+  { lat: 10.601776, lng: 122.935622 },  // 52 (W mid)
+  { lat: 10.601628, lng: 122.935968 },  // 53 (W end)
+];
+
+// Define road connections (which nodes connect to which via roads)
+const ROAD_EDGES = [
+  // === Road 1: Entrance heading NW ===
+  [0, 1],
+  [1, 2],
+  [2, 3],
+
+  // === Road 2: Entrance heading SE (left side of Estate A) ===
+  [1, 4],
+  [4, 5],
+  [5, 6],
+  [6, 7],
+
+  // === Road 3: Bottom road of Estate A (going NE from node 7) ===
+  [7, 8],
+  [8, 9],
+  [9, 10],
+
+  // === Road 4: Internal road of Estate A going NW from node 10 ===
+  [10, 11],
+  [11, 12],
+  [12, 13],
+  [13, 14],
+
+  // === Road 5: Top NW road (from node 3 heading NE along top) ===
+  [3, 15],
+  [15, 16],
+  [16, 17],
+  [17, 14],
+
+  // === Road 6: Estate B diagonal road (NE from node 17) ===
+  [17, 18],
+  [18, 19],
+  [19, 20],
+
+  // === Road 7: Estate B right edge (going S from node 20) ===
+  [20, 21],
+  [21, 22],
+  [22, 23],
+
+  // === Road 8: Estate B bottom road (going SW from node 23) ===
+  [23, 24],
+  [24, 25],
+  [25, 26],
+  [26, 27],
+  [27, 28],
+
+  // === Connection: node 10 to node 26 (center junction) ===
+  [10, 26],
+
+  // === Road 9: From center junction (26) going SE toward Estate C ===
+  [26, 29],
+  [29, 30],
+  [30, 31],
+  [31, 32],
+  [32, 33],
+
+  // === Road 10: Estate C right edge going S (from node 23/46) ===
+  [23, 46],
+  [46, 45],
+  [45, 44],
+  [44, 43],
+  [43, 42],
+  [42, 41],
+  [41, 33],
+
+  // === Road 11: Left-side road going south from node 30 to Estates D/E/U/V/W ===
+  // This is the road on the west border of D and E
+  [30, 47],
+  [47, 49],
+  [49, 52],
+  [52, 50],
+  [50, 38],
+  [38, 37],
+
+  // === Road 12: Estate E bottom/right perimeter ===
+  [38, 39],
+  [39, 40],
+  [40, 36],
+  [36, 37],
+
+  // === Road 13: Section U (branch east from node 47) ===
+  [47, 48],
+
+  // === Road 14: Section W (branch east from node 52) ===
+  [52, 53],
+
+  // === Road 15: Estate D right-side access (from C right edge via node 33) ===
+  [33, 34],
+  [34, 41],
+
+  // === Road 16: Estate E right-side access (from node 35/36) ===
+  [35, 36],
+  [34, 35],
+];
+
+// Build adjacency list from edges
+function buildGraph() {
+  const adj = {};
+  for (let i = 0; i < ROAD_NODES.length; i++) adj[i] = [];
+  for (const [a, b] of ROAD_EDGES) {
+    const dist = Math.sqrt(Math.pow(ROAD_NODES[a].lat - ROAD_NODES[b].lat, 2) + Math.pow(ROAD_NODES[a].lng - ROAD_NODES[b].lng, 2));
+    adj[a].push({ node: b, dist });
+    adj[b].push({ node: a, dist });
+  }
+  return adj;
+}
+
+const ROAD_GRAPH = buildGraph();
+
+// Dijkstra's shortest path
+function dijkstra(startIdx, endIdx) {
+  const dist = Array(ROAD_NODES.length).fill(Infinity);
+  const prev = Array(ROAD_NODES.length).fill(-1);
+  const visited = new Set();
+  dist[startIdx] = 0;
+
+  for (let i = 0; i < ROAD_NODES.length; i++) {
+    let u = -1;
+    for (let j = 0; j < ROAD_NODES.length; j++) {
+      if (!visited.has(j) && (u === -1 || dist[j] < dist[u])) u = j;
+    }
+    if (u === -1 || dist[u] === Infinity) break;
+    visited.add(u);
+    if (u === endIdx) break;
+
+    for (const { node: v, dist: w } of ROAD_GRAPH[u]) {
+      if (dist[u] + w < dist[v]) {
+        dist[v] = dist[u] + w;
+        prev[v] = u;
+      }
+    }
+  }
+
+  const path = [];
+  let cur = endIdx;
+  while (cur !== -1) {
+    path.unshift(cur);
+    cur = prev[cur];
+  }
+  return path[0] === startIdx ? path : [startIdx];
+}
+
+// Find the closest road node to a given point
+function findClosestNode(point) {
+  let minDist = Infinity;
+  let closest = 0;
+  const lat = parseFloat(point.lat);
+  const lng = parseFloat(point.lng);
+  for (let i = 0; i < ROAD_NODES.length; i++) {
+    const d = Math.pow(lat - ROAD_NODES[i].lat, 2) + Math.pow(lng - ROAD_NODES[i].lng, 2);
+    if (d < minDist) {
+      minDist = d;
+      closest = i;
+    }
+  }
+  return closest;
+}
+
+// Build route from entrance to destination following roads
+function findRoute(destination) {
+  const destNodeIdx = findClosestNode(destination);
+  const pathIndices = dijkstra(0, destNodeIdx);
+  const route = pathIndices.map(i => ROAD_NODES[i]);
+  route.push({ lat: parseFloat(destination.lat), lng: parseFloat(destination.lng) });
+  return route;
+}
+
+function RouteLine({ destination }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!map || !destination) return;
+
+    const route = findRoute(destination);
+
+    const polyline = new google.maps.Polyline({
+      path: route,
+      geodesic: true,
+      strokeColor: '#3b82f6',
+      strokeOpacity: 0.9,
+      strokeWeight: 4,
+      map,
+    });
+
+    // Entrance marker
+    const entranceMarker = new google.maps.Marker({
+      position: ENTRANCE,
+      map,
+      icon: {
+        path: google.maps.SymbolPath.CIRCLE,
+        scale: 8,
+        fillColor: '#3b82f6',
+        fillOpacity: 1,
+        strokeColor: '#ffffff',
+        strokeWeight: 3,
+      },
+      title: 'Entrance',
+    });
+
+    return () => {
+      polyline.setMap(null);
+      entranceMarker.setMap(null);
+    };
+  }, [map, destination]);
+
+  return null;
+}
+
+export default function CemeteryMap({ lots = [], height = '500px', onMapClick, isAdmin = false, onReserve, focusLotId, focusCoords }) {
   const [selectedLot, setSelectedLot] = useState(null);
   const isEditMode = !!onMapClick;
 
@@ -578,6 +1008,13 @@ export default function CemeteryMap({ lots = [], height = '500px', onMapClick, i
       if (lot) setSelectedLot(lot);
     }
   }, [focusLotId, lots]);
+
+  // Focus on coordinates from search (only draw route, don't open modal)
+  useEffect(() => {
+    if (focusCoords && focusCoords.lotId && lots.length > 0) {
+      // Don't open modal on search - just draw the route line
+    }
+  }, [focusCoords, lots]);
 
   const openModal = (lot) => {
     setSelectedLot(lot);
@@ -668,6 +1105,11 @@ export default function CemeteryMap({ lots = [], height = '500px', onMapClick, i
               <LotPin key={lot.id} lot={lot} onClick={openModal} clickable={!isEditMode} />
             )
           ))}
+
+          {/* Route line from entrance to focused lot (search only) */}
+          {focusCoords && focusCoords.lat && focusCoords.lng && (
+            <RouteLine destination={focusCoords} />
+          )}
         </Map>
       </APIProvider>
 
