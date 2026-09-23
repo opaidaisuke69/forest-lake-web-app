@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS burial_lots (
     block VARCHAR(50) NOT NULL,
     square_meter DECIMAL(10, 2) DEFAULT NULL,
     lot_type ENUM('lawn', 'mini_mausoleum', 'estate', 'legacy') DEFAULT 'lawn',
+    price DECIMAL(12, 2) DEFAULT NULL,
     latitude DECIMAL(10, 6) DEFAULT NULL,
     longitude DECIMAL(10, 6) DEFAULT NULL,
     status ENUM('available', 'reserved', 'occupied') NOT NULL DEFAULT 'available',

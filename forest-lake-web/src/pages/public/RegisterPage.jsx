@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { generateOTP, sendVerificationOTP } from '../../utils/emailjs';
+
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
 import ReCAPTCHA from 'react-google-recaptcha';
@@ -43,10 +43,8 @@ export default function RegisterPage() {
       // Register the account first (unverified)
       await register(form);
 
-      // Generate and send OTP
-      const code = generateOTP();
-      await api.post('/auth/store-otp.php', { email: form.email, otp: code, type: 'verification' });
-      await sendVerificationOTP(form.email, code);
+      // Generate and send OTP (server-side)
+      await api.post('/auth/send-otp.php', { email: form.email, type: 'verification' });
 
       toast.success('OTP sent to your email!');
       setCooldown(300);
@@ -72,9 +70,7 @@ export default function RegisterPage() {
   const handleResendOtp = async () => {
     setSendingOtp(true);
     try {
-      const code = generateOTP();
-      await api.post('/auth/store-otp.php', { email: form.email, otp: code, type: 'verification' });
-      await sendVerificationOTP(form.email, code);
+      await api.post('/auth/send-otp.php', { email: form.email, type: 'verification' });
       toast.success('New OTP sent!');
       setCooldown(300);
     } catch {

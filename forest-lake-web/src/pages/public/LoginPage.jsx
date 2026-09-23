@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { generateOTP, sendResetOTP, sendVerificationOTP } from '../../utils/emailjs';
+
 import api from '../../utils/api';
 import ReCAPTCHA from 'react-google-recaptcha';
 import toast from 'react-hot-toast';
@@ -76,9 +76,7 @@ export default function LoginPage() {
         setVerifyEmail(userEmail);
         setSendingOtp(true);
         try {
-          const code = generateOTP();
-          await api.post('/auth/store-otp.php', { email: userEmail, otp: code, type: 'verification' });
-          await sendVerificationOTP(userEmail, code);
+          await api.post('/auth/send-otp.php', { email: userEmail, type: 'verification' });
           toast.success('Verification OTP sent to your email!');
           setCooldown(300);
           setVerifyStep('otp');
@@ -105,9 +103,7 @@ export default function LoginPage() {
     if (!resetEmail) { toast.error('Enter your email'); return; }
     setSendingOtp(true);
     try {
-      const code = generateOTP();
-      await api.post('/auth/store-otp.php', { email: resetEmail, otp: code, type: 'reset' });
-      await sendResetOTP(resetEmail, code);
+      await api.post('/auth/send-otp.php', { email: resetEmail, type: 'reset' });
       toast.success('Reset OTP sent to your email!');
       setForgotStep('otp');
     } catch {
@@ -162,9 +158,7 @@ export default function LoginPage() {
   const handleResendVerifyOtp = async () => {
     setSendingOtp(true);
     try {
-      const code = generateOTP();
-      await api.post('/auth/store-otp.php', { email: verifyEmail, otp: code, type: 'verification' });
-      await sendVerificationOTP(verifyEmail, code);
+      await api.post('/auth/send-otp.php', { email: verifyEmail, type: 'verification' });
       toast.success('New OTP sent!');
       setCooldown(300);
     } catch {

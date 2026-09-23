@@ -8,7 +8,7 @@ import Modal from '../../components/Modal';
 import { TableSkeleton } from '../../components/LoadingSkeleton';
 import toast from 'react-hot-toast';
 
-const emptyLot = { lot_number: '', section: '', block: '', square_meter: '', max_slots: '8', lot_type: 'lawn', latitude: '', longitude: '', status: 'available', description: '' };
+const emptyLot = { lot_number: '', section: '', block: '', square_meter: '', max_slots: '8', lot_type: 'lawn', price: '', latitude: '', longitude: '', status: 'available', description: '' };
 
 export default function AdminBurialLots() {
   const [lots, setLots] = useState([]);
@@ -219,6 +219,10 @@ export default function AdminBurialLots() {
                   <option value="estate">Estate Lot</option>
                   <option value="legacy">Legacy Lot</option>
                 </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Price (₱)</label>
+                <input type="number" step="0.01" min="0" value={form.price ?? ''} onChange={e => setForm({ ...form, price: e.target.value })} className="input-modern" placeholder="e.g. 75000" />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">

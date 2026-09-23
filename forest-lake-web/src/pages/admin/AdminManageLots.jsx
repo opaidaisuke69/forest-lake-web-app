@@ -23,6 +23,8 @@ export default function AdminManageLots() {
   const [imageFile, setImageFile] = useState(null);
   const [actionModal, setActionModal] = useState(null);
   const [processing, setProcessing] = useState(false);
+  const [rejectModal, setRejectModal] = useState(null);
+  const [rejectReason, setRejectReason] = useState('');
 
   const fetchData = () => {
     api.get('/reservations/list.php?role=admin')
@@ -101,20 +103,28 @@ export default function AdminManageLots() {
 
   const handleApproveDeceased = async (d) => {
     try {
-      await api.put('/deceased/update.php', { id: d.id, name: d.name, date_of_birth: d.date_of_birth, date_of_death: d.date_of_death, relationship_to_client: d.relationship_to_client, burial_date: d.burial_date, status: 'approved' });
+      await api.put('/deceased/update.php', { id: d.id, name: d.name, gender: d.gender, date_of_birth: d.date_of_birth, date_of_death: d.date_of_death, relationship_to_client: d.relationship_to_client, burial_date: d.burial_date, status: 'approved', admin_remarks: '' });
       toast.success('Deceased record approved');
       const res = await api.get(`/deceased/list.php?reservation_id=${selectedRes.id}`);
       setDeceasedList(res.data.data || []);
-    } catch { toast.error('Failed to approve'); }
+    } catch (err) { toast.error(err.response?.data?.message || 'Failed to approve'); }
   };
 
-  const handleRejectDeceased = async (d) => {
+  const submitReject = async () => {
+    if (!rejectModal) return;
+    const reason = rejectReason.trim();
+    if (!reason) { toast.error('Please provide a reason for rejection'); return; }
+    setProcessing(true);
     try {
-      await api.put('/deceased/update.php', { id: d.id, name: d.name, date_of_birth: d.date_of_birth, date_of_death: d.date_of_death, relationship_to_client: d.relationship_to_client, burial_date: d.burial_date, status: 'rejected' });
+      const d = rejectModal;
+      await api.put('/deceased/update.php', { id: d.id, name: d.name, gender: d.gender, date_of_birth: d.date_of_birth, date_of_death: d.date_of_death, relationship_to_client: d.relationship_to_client, burial_date: d.burial_date, status: 'rejected', admin_remarks: reason });
       toast.success('Deceased record rejected');
+      setRejectModal(null);
+      setRejectReason('');
       const res = await api.get(`/deceased/list.php?reservation_id=${selectedRes.id}`);
       setDeceasedList(res.data.data || []);
-    } catch { toast.error('Failed to reject'); }
+    } catch (err) { toast.error(err.response?.data?.message || 'Failed to reject'); }
+    finally { setProcessing(false); }
   };
 
   const handleDeleteDeceased = async (id) => {
@@ -254,16 +264,44 @@ export default function AdminManageLots() {
                   {d.date_of_death && <p className="text-gray-500">Died: <span className="text-gray-700">{d.date_of_death}</span></p>}
                   {d.burial_date && <p className="text-gray-500">Burial Date: <span className="text-gray-700">{d.burial_date}</span></p>}
 
+                  {/* Submitted documents for verification */}
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {d.birth_certificate ? (
+                      <a href={`http://localhost/ForestLake/forest-lake-api${d.birth_certificate}`} target="_blank" rel="noreferrer" className="text-[11px] bg-blue-50 text-blue-600 border border-blue-100 px-2.5 py-1 rounded-full hover:bg-blue-100 transition">📄 Birth Certificate</a>
+                    ) : (
+                      <span className="text-[11px] bg-gray-100 text-gray-400 border border-gray-200 px-2.5 py-1 rounded-full">Birth Certificate: none</span>
+                    )}
+                    {d.death_certificate ? (
+                      <a href={`http://localhost/ForestLake/forest-lake-api${d.death_certificate}`} target="_blank" rel="noreferrer" className="text-[11px] bg-blue-50 text-blue-600 border border-blue-100 px-2.5 py-1 rounded-full hover:bg-blue-100 transition">📄 Death Certificate</a>
+                    ) : (
+                      <span className="text-[11px] bg-gray-100 text-gray-400 border border-gray-200 px-2.5 py-1 rounded-full">Death Certificate: none</span>
+                    )}
+                  </div>
+
+                  {/* Admin feedback / rejection reason */}
+                  {d.admin_remarks && (
+                    <div className={`mt-2 rounded-lg px-3 py-2 text-xs ${d.status === 'rejected' ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-blue-50 text-blue-700 border border-blue-100'}`}>
+                      <span className="font-semibold">Admin feedback:</span> {d.admin_remarks}
+                    </div>
+                  )}
+
                   {/* Approve / Reject buttons for pending records */}
                   {d.status === 'pending' && (
-                    <div className="flex gap-2 pt-2">
-                      <button onClick={() => handleApproveDeceased(d)} className="flex-1 text-xs bg-green-100 text-green-700 px-3 py-2 rounded-lg font-semibold hover:bg-green-200 border border-green-200 transition">
-                        ✓ Approve
-                      </button>
-                      <button onClick={() => handleRejectDeceased(d)} className="flex-1 text-xs bg-red-100 text-red-700 px-3 py-2 rounded-lg font-semibold hover:bg-red-200 border border-red-200 transition">
-                        ✕ Reject
-                      </button>
-                    </div>
+                    <>
+                      {selectedRes.status !== 'occupied' && (
+                        <p className="text-[11px] text-amber-700 bg-amber-100 border border-amber-200 rounded-lg px-3 py-2 mt-2">
+                          This slot is not occupied yet. Mark the reservation as occupied before accepting deceased information.
+                        </p>
+                      )}
+                      <div className="flex gap-2 pt-2">
+                        <button onClick={() => handleApproveDeceased(d)} disabled={selectedRes.status !== 'occupied'} className={`flex-1 text-xs px-3 py-2 rounded-lg font-semibold border transition ${selectedRes.status === 'occupied' ? 'bg-green-100 text-green-700 hover:bg-green-200 border-green-200' : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'}`}>
+                          ✓ Accept
+                        </button>
+                        <button onClick={() => { setRejectModal(d); setRejectReason(''); }} className="flex-1 text-xs bg-red-100 text-red-700 px-3 py-2 rounded-lg font-semibold hover:bg-red-200 border border-red-200 transition">
+                          ✕ Reject
+                        </button>
+                      </div>
+                    </>
                   )}
                 </div>
               ))}
@@ -320,6 +358,31 @@ export default function AdminManageLots() {
               </button>
             </div>
           </form>
+        </Modal>
+      )}
+
+      {/* Reject Deceased Modal with document feedback */}
+      {rejectModal && (
+        <Modal title={`Reject — ${rejectModal.name}`} onClose={() => { setRejectModal(null); setRejectReason(''); }}>
+          <p className="text-sm text-gray-600 mb-3">Provide feedback so the client knows what to fix. Required valid documents:</p>
+          <ul className="text-xs text-gray-600 bg-gray-50 rounded-xl p-3 mb-4 space-y-1 list-disc list-inside">
+            <li>Birth Certificate (PSA / valid copy)</li>
+            <li>Death Certificate (PSA / registered copy)</li>
+          </ul>
+          <div className="flex flex-wrap gap-2 mb-3">
+            {['Missing birth certificate', 'Missing death certificate', 'Invalid / unreadable document', 'Details do not match documents'].map(q => (
+              <button key={q} type="button" onClick={() => setRejectReason(r => r ? `${r}; ${q}` : q)} className="text-[11px] bg-red-50 text-red-600 border border-red-100 px-2.5 py-1 rounded-full hover:bg-red-100 transition">
+                + {q}
+              </button>
+            ))}
+          </div>
+          <textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)} rows="3" className="input-modern resize-none" placeholder="Reason / admin feedback for rejection (required)"></textarea>
+          <div className="flex gap-3 mt-4">
+            <button onClick={() => { setRejectModal(null); setRejectReason(''); }} className="btn-secondary flex-1">Cancel</button>
+            <button onClick={submitReject} disabled={processing} className="flex-1 bg-red-600 text-white py-3 rounded-xl font-semibold hover:bg-red-700 transition disabled:opacity-50">
+              {processing ? 'Rejecting...' : 'Reject Record'}
+            </button>
+          </div>
         </Modal>
       )}
 

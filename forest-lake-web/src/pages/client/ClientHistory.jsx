@@ -13,13 +13,18 @@ export default function ClientHistory() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [deceased, setDeceased] = useState([]);
 
   const fetchData = () => {
-    api.get('/reservations/list.php')
-      .then(res => {
-        const data = res.data.data || [];
+    Promise.all([
+      api.get('/reservations/list.php'),
+      api.get('/deceased/mine.php').catch(() => ({ data: { data: [] } })),
+    ])
+      .then(([resRes, decRes]) => {
+        const data = resRes.data.data || [];
         setReservations(data);
         setFiltered(data);
+        setDeceased(decRes.data.data || []);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -30,7 +35,25 @@ export default function ClientHistory() {
     api.get('/reservations/list.php')
       .then(res => updateIfChanged(setReservations, res.data.data || []))
       .catch(() => {});
+    api.get('/deceased/mine.php')
+      .then(res => updateIfChanged(setDeceased, res.data.data || []))
+      .catch(() => {});
   });
+
+  // Build a remarks string per reservation: admin remarks + any deceased
+  // record feedback (especially rejection reasons) so history is never empty
+  // when there is relevant information to show.
+  const remarksFor = (r) => {
+    const parts = [];
+    if (r.admin_remarks) parts.push(r.admin_remarks);
+    deceased
+      .filter(d => String(d.reservation_id) === String(r.id) && d.admin_remarks)
+      .forEach(d => {
+        const label = d.status === 'rejected' ? 'Rejected' : 'Note';
+        parts.push(`${label} (${d.name}): ${d.admin_remarks}`);
+      });
+    return parts.join(' • ');
+  };
 
   useEffect(() => {
     let result = reservations;
@@ -89,7 +112,7 @@ export default function ClientHistory() {
                     <td className="px-5 py-4 text-gray-600">{r.section} · {r.block}</td>
                     <td className="px-5 py-4 text-gray-500">{formatDate(r.reservation_date || r.created_at)}</td>
                     <td className="px-5 py-4"><StatusBadge status={r.status} /></td>
-                    <td className="px-5 py-4 text-gray-500 text-xs max-w-[200px] truncate">{r.admin_remarks || '—'}</td>
+                    <td className="px-5 py-4 text-gray-500 text-xs max-w-[240px]" title={remarksFor(r)}>{remarksFor(r) || '—'}</td>
                   </tr>
                 ))}
               </tbody>

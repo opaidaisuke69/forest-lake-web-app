@@ -14,6 +14,8 @@ export default function ClientManageLots() {
   const [deceasedForm, setDeceasedForm] = useState({ name: '', gender: '', date_of_birth: '', date_of_death: '', burial_date: '' });
   const [savingDeceased, setSavingDeceased] = useState(false);
   const [imageFile, setImageFile] = useState(null);
+  const [birthCert, setBirthCert] = useState(null);
+  const [deathCert, setDeathCert] = useState(null);
 
   useEffect(() => {
     api.get('/reservations/list.php')
@@ -63,9 +65,23 @@ export default function ClientManageLots() {
         await api.post('/deceased/upload-image.php', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
       }
 
+      // Upload required documents if provided
+      const uploadDoc = async (file, docType) => {
+        if (!file || !newId) return;
+        const fd = new FormData();
+        fd.append('deceased_id', newId);
+        fd.append('doc_type', docType);
+        fd.append('document', file);
+        await api.post('/deceased/upload-document.php', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      };
+      await uploadDoc(birthCert, 'birth_certificate');
+      await uploadDoc(deathCert, 'death_certificate');
+
       toast.success('Deceased info submitted for admin review');
       setDeceasedForm({ name: '', gender: '', date_of_birth: '', date_of_death: '', burial_date: '' });
       setImageFile(null);
+      setBirthCert(null);
+      setDeathCert(null);
       // Refresh list
       const listRes = await api.get(`/deceased/list.php?reservation_id=${deceasedModal.id}`);
       setDeceasedList(listRes.data.data || []);
@@ -149,21 +165,33 @@ export default function ClientManageLots() {
                     </p>
                   )}
                   {d.status === 'rejected' && (
-                    <p className="text-xs text-red-600 mt-2 flex items-center gap-1">
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                      Rejected by admin
-                    </p>
+                    <div className="mt-2">
+                      <p className="text-xs text-red-600 flex items-center gap-1">
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                        Rejected by admin
+                      </p>
+                      {d.admin_remarks && (
+                        <p className="text-xs text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2 mt-1">
+                          <span className="font-semibold">Reason:</span> {d.admin_remarks}
+                        </p>
+                      )}
+                    </div>
                   )}
                 </div>
               ))}
             </div>
           )}
 
-          {/* Submit form - only show if no approved/pending record exists */}
-          {deceasedList.filter(d => d.status === 'approved' || d.status === 'pending').length < 1 ? (
+          {/* Submit form - only when the slot is occupied and no approved/pending record exists */}
+          {deceasedModal.status !== 'occupied' ? (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-700">
+              <p className="font-semibold mb-1">Deceased information not yet available</p>
+              <p className="text-xs">You can submit deceased information once this slot has been marked as <span className="font-semibold">occupied</span> by the administrator.</p>
+            </div>
+          ) : deceasedList.filter(d => d.status === 'approved' || d.status === 'pending').length < 1 ? (
             <form onSubmit={handleSubmitDeceased} className="space-y-3">
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Submit Deceased Information</p>
-              <p className="text-xs text-gray-400 mb-2">Your submission will be reviewed by the admin before being approved.</p>
+              <p className="text-xs text-gray-400 mb-2">Your submission will be reviewed by the admin before being approved. Please ensure a valid <span className="font-medium">birth certificate</span> and <span className="font-medium">death certificate</span> are ready to upload.</p>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
                 <input type="text" value={deceasedForm.name} onChange={e => setDeceasedForm({...deceasedForm, name: e.target.value})} required className="input-modern" placeholder="Full name of deceased" />
@@ -194,6 +222,18 @@ export default function ClientManageLots() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Photo of Deceased</label>
                 <input type="file" accept="image/jpeg,image/png,image/webp" onChange={e => setImageFile(e.target.files[0] || null)} className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:bg-purple-50 file:text-purple-600 file:font-medium hover:file:bg-purple-100 file:transition-all cursor-pointer" />
                 <p className="text-xs text-gray-400 mt-1">JPG, PNG, or WEBP. Max 5MB.</p>
+              </div>
+              <div className="bg-gray-50 rounded-xl p-3 space-y-3 border border-gray-100">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Required Documents</p>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Birth Certificate</label>
+                  <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={e => setBirthCert(e.target.files[0] || null)} className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:bg-purple-50 file:text-purple-600 file:font-medium hover:file:bg-purple-100 file:transition-all cursor-pointer" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Death Certificate</label>
+                  <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={e => setDeathCert(e.target.files[0] || null)} className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:bg-purple-50 file:text-purple-600 file:font-medium hover:file:bg-purple-100 file:transition-all cursor-pointer" />
+                </div>
+                <p className="text-xs text-gray-400">JPG, PNG, WEBP, or PDF. Max 10MB each. The admin will verify these before accepting.</p>
               </div>
               <button type="submit" disabled={savingDeceased} className="w-full btn-primary mt-2">
                 {savingDeceased ? 'Submitting...' : 'Submit for Review'}

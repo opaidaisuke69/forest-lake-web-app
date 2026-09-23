@@ -1,0 +1,9 @@
+# Allow direct access to document files (certificates)
+<FilesMatch "\.(jpg|jpeg|png|gif|webp|pdf)$">
+    Require all granted
+</FilesMatch>
+
+# Deny execution of any scripts
+<FilesMatch "\.(php|phtml|php3|php4|php5|pl|py|cgi|sh)$">
+    Require all denied
+</FilesMatch>

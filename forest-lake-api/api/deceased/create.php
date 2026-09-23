@@ -14,13 +14,22 @@ if (empty($data['burial_lot_id']) || empty($data['name'])) {
     exit;
 }
 
-// If client, verify they own a reservation for this lot
+// If client, verify they own an OCCUPIED reservation for this lot.
+// Deceased information can only be submitted once the slot is occupied.
 if ($user['role'] === 'client') {
-    $stmt = $db->prepare("SELECT id FROM reservations WHERE client_id = :client_id AND burial_lot_id = :lot_id AND status IN ('approved', 'occupied')");
+    $stmt = $db->prepare("SELECT id, status FROM reservations WHERE client_id = :client_id AND burial_lot_id = :lot_id AND status IN ('approved', 'occupied') ORDER BY FIELD(status,'occupied','approved') LIMIT 1");
     $stmt->execute([':client_id' => $user['id'], ':lot_id' => $data['burial_lot_id']]);
-    if (!$stmt->fetch()) {
+    $ownedReservation = $stmt->fetch();
+
+    if (!$ownedReservation) {
         http_response_code(403);
         echo json_encode(['message' => 'You do not have access to this lot']);
+        exit;
+    }
+
+    if ($ownedReservation['status'] !== 'occupied') {
+        http_response_code(400);
+        echo json_encode(['message' => 'Deceased information cannot be submitted until the slot is marked as occupied']);
         exit;
     }
 }

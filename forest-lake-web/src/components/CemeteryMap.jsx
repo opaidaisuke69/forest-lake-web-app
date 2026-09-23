@@ -648,10 +648,12 @@ function LotModal({ lot, onClose, onReserve }) {
           {/* Lot Details */}
           <div className="bg-gray-50 rounded-xl p-4 space-y-2 mb-4">
             <DetailRow label="Lot Number" value={lot.lot_number} />
+            <DetailRow label="Type" value={LOT_TYPE_LABELS[lot.lot_type] || 'Lawn Lot'} />
             <DetailRow label="Block" value={lot.block} />
             <DetailRow label="Section" value={lot.section} />
             <DetailRow label="Area" value={lot.square_meter ? `${lot.square_meter} m²` : '—'} />
             <DetailRow label="Slots" value={`${lot.max_slots || 8}`} />
+            <DetailRow label="Price" value={formatPrice(lot.price)} />
           </div>
 
           {lot.description && (
@@ -714,6 +716,18 @@ function LotModal({ lot, onClose, onReserve }) {
       )}
     </>
   );
+}
+
+const LOT_TYPE_LABELS = {
+  lawn: 'Lawn Lot',
+  mini_mausoleum: 'Mini-Mausoleum',
+  estate: 'Estate Lot',
+  legacy: 'Legacy Lot',
+};
+
+function formatPrice(price) {
+  if (price === null || price === undefined || price === '' || Number(price) <= 0) return '—';
+  return `₱${Number(price).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function DetailRow({ label, value }) {
